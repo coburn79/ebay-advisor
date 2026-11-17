@@ -1,0 +1,6 @@
+.venv/
+__pycache__/
+*.pyc
+launcher.sh
+*.app
+.ebay_advisor_key
