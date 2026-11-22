@@ -43,10 +43,14 @@ python "$SCRIPT_DIR/ebay_advisor.py"
 SHELL
 chmod +x "$LAUNCHER"
 
-# Build AppleScript app
+# Build AppleScript app — opens Terminal so tkinter GUI renders correctly
 ASCRIPT=$(mktemp /tmp/ebay_advisor_XXXXXX.scpt)
 cat > "$ASCRIPT" << APPLESCRIPT
-do shell script quoted form of "$LAUNCHER"
+tell application "Terminal"
+    activate
+    set w to do script "${LAUNCHER}"
+    set custom title of w to "eBay Listing Advisor"
+end tell
 APPLESCRIPT
 
 osacompile -o "$APP_PATH" "$ASCRIPT"

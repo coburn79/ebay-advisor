@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """eBay Listing Advisor — analyzes your active listings and suggests improvements."""
 
-__version__ = "1.2.0"
+__version__ = "1.3.0"
 
 import asyncio
 import json
