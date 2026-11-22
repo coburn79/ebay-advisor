@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """eBay Listing Advisor — analyzes your active listings and suggests improvements."""
 
-__version__ = "1.4.0"
+__version__ = "1.5.0"
 
 import asyncio
 import json
@@ -36,58 +36,21 @@ def save_api_key(key: str):
 # ── eBay scraper ─────────────────────────────────────────────────────────────
 
 CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-CHROME_PROFILE = str(Path.home() / "Library/Application Support/Google/Chrome")
-
-
-def chrome_is_running() -> bool:
-    import subprocess
-    result = subprocess.run(["pgrep", "-x", "Google Chrome"], capture_output=True)
-    return result.returncode == 0
-
-
-def quit_chrome():
-    import subprocess
-    import time
-    # Graceful quit first
-    subprocess.run(["osascript", "-e", 'tell application "Google Chrome" to quit'], capture_output=True)
-    for _ in range(16):
-        if not chrome_is_running():
-            break
-        time.sleep(0.5)
-    # Kill any lingering Chrome helper processes
-    subprocess.run(["pkill", "-f", "Google Chrome Helper"], capture_output=True)
-    time.sleep(0.5)
-    # Remove the singleton lock files so Playwright can take over the profile
-    chrome_dir = Path.home() / "Library/Application Support/Google/Chrome"
-    for lock in ["SingletonLock", "SingletonCookie", "SingletonSocket"]:
-        p = chrome_dir / lock
-        try:
-            if p.exists() or p.is_symlink():
-                p.unlink()
-        except Exception:
-            pass
-
-
-def reopen_chrome():
-    import subprocess
-    subprocess.Popen(["open", "-a", "Google Chrome"])
+# App-owned session dir — no macOS permission conflicts with the real Chrome profile
+SESSION_DIR = str(Path.home() / ".ebay-advisor-session")
 
 
 async def scrape_listings(status_cb) -> list[dict]:
-    """Open Chrome with the user's profile (keeps eBay login), scrape all active listings."""
+    """Open a browser with a saved eBay session, scrape all active listings."""
     from playwright.async_api import async_playwright
 
+    Path(SESSION_DIR).mkdir(exist_ok=True)
     listings = []
-    chrome_was_running = chrome_is_running()
-
-    if chrome_was_running:
-        status_cb("Closing Chrome to free your profile for the scan…")
-        quit_chrome()
 
     async with async_playwright() as p:
-        status_cb("Opening Chrome with your eBay session…")
+        status_cb("Opening browser with your eBay session…")
         ctx = await p.chromium.launch_persistent_context(
-            user_data_dir=CHROME_PROFILE,
+            user_data_dir=SESSION_DIR,
             executable_path=CHROME,
             headless=False,
             args=["--no-first-run", "--no-default-browser-check"],
@@ -99,10 +62,10 @@ async def scrape_listings(status_cb) -> list[dict]:
         status_cb("Navigating to eBay Seller Hub…")
         await page.goto("https://www.ebay.com/sh/lst/active", wait_until="networkidle", timeout=30000)
 
-        # Handle login redirect
-        if "signin" in page.url or "login" in page.url:
-            status_cb("⚠️  Please sign in to eBay in the Chrome window, then click Continue.")
-            await page.wait_for_url("**/sh/lst/active", timeout=120000)
+        # First run or session expired — wait for user to log in
+        if "signin" in page.url or "login" in page.url or "ebay.com/sh" not in page.url:
+            status_cb("⚠️  Please sign in to eBay in the browser window. Your session will be saved for next time.")
+            await page.wait_for_url("**/sh/**", timeout=300000)
 
         # Collect listing rows — iterate through pagination
         page_num = 1
@@ -219,11 +182,6 @@ async def scrape_listings(status_cb) -> list[dict]:
                 listing["sold_comps"] = []
 
         await ctx.close()
-
-        if chrome_was_running:
-            status_cb("Reopening Chrome…")
-            reopen_chrome()
-
         return detailed
 
 
