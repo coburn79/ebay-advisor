@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """eBay Listing Advisor — analyzes your active listings and suggests improvements."""
 
-__version__ = "1.1.0"
+__version__ = "1.2.0"
 
 import asyncio
 import json
@@ -39,11 +39,38 @@ CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 CHROME_PROFILE = str(Path.home() / "Library/Application Support/Google/Chrome")
 
 
+def chrome_is_running() -> bool:
+    import subprocess
+    result = subprocess.run(["pgrep", "-x", "Google Chrome"], capture_output=True)
+    return result.returncode == 0
+
+
+def quit_chrome():
+    import subprocess
+    subprocess.run(["osascript", "-e", 'tell application "Google Chrome" to quit'], capture_output=True)
+    # Wait up to 8 seconds for Chrome to fully close
+    import time
+    for _ in range(16):
+        if not chrome_is_running():
+            break
+        time.sleep(0.5)
+
+
+def reopen_chrome():
+    import subprocess
+    subprocess.Popen(["open", "-a", "Google Chrome"])
+
+
 async def scrape_listings(status_cb) -> list[dict]:
     """Open Chrome with the user's profile (keeps eBay login), scrape all active listings."""
     from playwright.async_api import async_playwright
 
     listings = []
+    chrome_was_running = chrome_is_running()
+
+    if chrome_was_running:
+        status_cb("Closing Chrome to free your profile for the scan…")
+        quit_chrome()
 
     async with async_playwright() as p:
         status_cb("Opening Chrome with your eBay session…")
@@ -180,6 +207,11 @@ async def scrape_listings(status_cb) -> list[dict]:
                 listing["sold_comps"] = []
 
         await ctx.close()
+
+        if chrome_was_running:
+            status_cb("Reopening Chrome…")
+            reopen_chrome()
+
         return detailed
 
 
