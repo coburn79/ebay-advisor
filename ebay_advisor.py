@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """eBay Listing Advisor — analyzes your active listings and suggests improvements."""
 
-__version__ = "1.3.0"
+__version__ = "1.4.0"
 
 import asyncio
 import json
@@ -47,13 +47,25 @@ def chrome_is_running() -> bool:
 
 def quit_chrome():
     import subprocess
-    subprocess.run(["osascript", "-e", 'tell application "Google Chrome" to quit'], capture_output=True)
-    # Wait up to 8 seconds for Chrome to fully close
     import time
+    # Graceful quit first
+    subprocess.run(["osascript", "-e", 'tell application "Google Chrome" to quit'], capture_output=True)
     for _ in range(16):
         if not chrome_is_running():
             break
         time.sleep(0.5)
+    # Kill any lingering Chrome helper processes
+    subprocess.run(["pkill", "-f", "Google Chrome Helper"], capture_output=True)
+    time.sleep(0.5)
+    # Remove the singleton lock files so Playwright can take over the profile
+    chrome_dir = Path.home() / "Library/Application Support/Google/Chrome"
+    for lock in ["SingletonLock", "SingletonCookie", "SingletonSocket"]:
+        p = chrome_dir / lock
+        try:
+            if p.exists() or p.is_symlink():
+                p.unlink()
+        except Exception:
+            pass
 
 
 def reopen_chrome():
