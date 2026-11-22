@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """eBay Listing Advisor — analyzes your active listings and suggests improvements."""
 
+__version__ = "1.1.0"
+
 import asyncio
 import json
 import os
@@ -220,7 +222,7 @@ After all individual listings, provide:
 Be specific. If a listing is good, say so. Don't invent problems."""
 
     message = client.messages.create(
-        model="claude-opus-4-5",
+        model="claude-haiku-5-5",
         max_tokens=8192,
         messages=[{"role": "user", "content": prompt}],
         system=SYSTEM_PROMPT,
